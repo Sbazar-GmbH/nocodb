@@ -25,6 +25,7 @@ import {
 import { JobsRedis } from '~/modules/jobs/redis/jobs-redis';
 import { InstanceCommands } from '~/interface/Jobs';
 import { deepMerge, partialExtract } from '~/utils';
+import View from '~/models/View';
 
 export default class Source implements SourceType {
   id?: string;
@@ -33,6 +34,7 @@ export default class Source implements SourceType {
   alias?: string;
   type?: DriverClient;
   is_meta?: BoolType;
+  is_local?: BoolType;
   is_schema_readonly?: BoolType;
   is_data_readonly?: BoolType;
   config?: string;
@@ -70,6 +72,7 @@ export default class Source implements SourceType {
       'config',
       'type',
       'is_meta',
+      'is_local',
       'inflection_column',
       'inflection_table',
       'order',
@@ -130,6 +133,7 @@ export default class Source implements SourceType {
       'config',
       'type',
       'is_meta',
+      'is_local',
       'inflection_column',
       'inflection_table',
       'order',
@@ -200,6 +204,11 @@ export default class Source implements SourceType {
       `${CacheScope.BASE}:${sourceId}`,
       prepareForResponse(updateObj),
     );
+
+    // trigger cache clear and don't wait
+    this.updateRelatedCaches(context, sourceId, ncMeta).catch((e) => {
+      console.error(e);
+    });
 
     if (JobsRedis.available) {
       await JobsRedis.emitWorkerCommand(InstanceCommands.RELEASE, sourceId);
@@ -291,6 +300,15 @@ export default class Source implements SourceType {
   }
 
   public async getConnectionConfig(): Promise<any> {
+    if (this.is_meta || this.is_local) {
+      const metaConfig = await NcConnectionMgrv2.getDataConfig();
+      const config = { ...metaConfig };
+      if (config.client === 'sqlite3') {
+        config.connection = metaConfig;
+      }
+      return config;
+    }
+
     const config = this.getConfig();
 
     // todo: update sql-client args
@@ -301,7 +319,6 @@ export default class Source implements SourceType {
 
     return config;
   }
-
   public getConfig(skipIntegrationConfig = false): any {
     if (this.is_meta) {
       const metaConfig = Noco.getConfig()?.meta?.db;
@@ -550,9 +567,9 @@ export default class Source implements SourceType {
       if (_mode === 0) {
         return this.is_meta;
       }
-      return false;
+      return this.is_local;
     } else {
-      return this.is_meta;
+      return this.is_meta || this.is_local;
     }
   }
 
@@ -565,5 +582,23 @@ export default class Source implements SourceType {
       `${MetaTable.BASES}.fk_integration_id`,
       `${MetaTable.INTEGRATIONS}.id`,
     );
+  }
+
+  private static async updateRelatedCaches(
+    context: NcContext,
+    sourceId: string,
+    ncMeta = Noco.ncMeta,
+  ) {
+    // get models
+    const models = await Model.list(
+      context,
+      { source_id: sourceId, base_id: context.base_id },
+      ncMeta,
+    );
+
+    // clear single query caches for models
+    for (const model of models) {
+      await View.clearSingleQueryCache(context, model.id, null, ncMeta);
+    }
   }
 }
