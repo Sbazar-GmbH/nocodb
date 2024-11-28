@@ -75,7 +75,6 @@ import Record from '~icons/nc-icons/record'
 import Project from '~icons/nc-icons/project'
 import LookupIcon from '~icons/nc-icons/lookup'
 import FileImageIcon from '~icons/nc-icons/file-image'
-import Calendar from '~icons/lucide/calendar'
 
 import PhUsers from '~icons/ph/users'
 import PhUser from '~icons/ph/user'
@@ -138,7 +137,8 @@ import NcCheckCircle from '~icons/nc-icons/check-circle'
 import NcCheckFill from '~icons/nc-icons/checkFill'
 import NcExternalLink from '~icons/nc-icons/external-link'
 import NcCamera from '~icons/nc-icons/camera'
-
+import NcRefreshCW from '~icons/nc-icons/refresh-cw'
+import NcBulb from '~icons/nc-icons/bulb'
 // import NcProjectGray from '~icons/nc-icons/project-gray'
 import NcPhoneCall from '~icons/nc-icons/phone-call'
 import NcItalic from '~icons/nc-icons/italic'
@@ -152,6 +152,7 @@ import NcControlPanel from '~icons/nc-icons/control-panel'
 import NcHome from '~icons/nc-icons/home'
 import NcHome1 from '~icons/nc-icons/home1'
 import NcWorkspace from '~icons/nc-icons/workspace'
+import NcMegaPhone from '~icons/nc-icons/megaphone'
 
 import NcCellBarcode from '~icons/nc-icons/cell-barcode'
 import NcCellCheckbox from '~icons/nc-icons/cell-checkbox'
@@ -187,6 +188,8 @@ import NcCellSystemUser from '~icons/nc-icons/system-user'
 import NcCellSystemText from '~icons/nc-icons/system-text'
 import NcCellAttachment from '~icons/nc-icons/cell-attachment'
 import NcCellButton from '~icons/nc-icons/cell-button'
+import NcCellAiButton from '~icons/nc-icons/cell-ai-button'
+import NcCellAi from '~icons/nc-icons/cell-ai'
 
 import NcCircleCheck from '~icons/nc-icons/circle-check'
 import OnetoOneIcon from '~icons/nc-icons/onetoone'
@@ -218,6 +221,7 @@ import NcGitCommit from '~icons/nc-icons/git-commit'
 import NcCircle from '~icons/nc-icons/circle'
 import NcServer1 from '~icons/nc-icons/server1'
 import NcThumbsUpOutline from '~icons/nc-icons/thumbs-up-outline'
+import NcNocoDB from '~icons/nc-icons/nocodb'
 
 // Sync data
 import NcAppleSolid from '~icons/nc-icons/apple_solid'
@@ -531,6 +535,10 @@ import NcMousePointerIcon from '~icons/nc-icons-v2/mouse-pointer.svg'
 import NcAlignLeftIcon from '~icons/nc-icons-v2/align-left.svg'
 import NcHeartIcon from '~icons/nc-icons-v2/heart.svg'
 import NcTrendingUpIcon from '~icons/nc-icons-v2/trending-up.svg'
+import NcYoutube2Icon from '~icons/nc-icons/youtube2.svg'
+import NcRedditIcon from '~icons/nc-icons/reddit.svg'
+import NcTwitterIcon from '~icons/nc-icons/twitter-x-line.svg'
+import NcDiscordIcon from '~icons/nc-icons/discord.svg'
 
 import NcSlash1 from '~icons/nc-icons/slash1'
 
@@ -561,6 +569,10 @@ import NcInfoSolid from '~icons/nc-icons/info-solid'
 import NcPlaceholderIcon from '~icons/nc-icons/placeholder-icon'
 import NcSpanner from '~icons/nc-icons/spanner'
 import NcScript from '~icons/nc-icons/script'
+import NcAutoAwesome from '~icons/nc-icons/auto_awesome'
+import NcPlusAi from '~icons/nc-icons/plus-ai'
+import NcPlusMultiple from '~icons/nc-icons/plus-multiple'
+import NcPlusSquareSolid from '~icons/nc-icons/plus-square-solid'
 
 // keep it for reference
 // todo: remove it after all icons are migrated
@@ -759,7 +771,12 @@ export const iconMap = {
   cellSystemText: NcCellSystemText,
   cellAttachment: NcCellAttachment,
   cellButton: NcCellButton,
+  cellAiButton: h(NcCellAiButton, { stroke: 'transparent' }),
+  cellAi: h(NcCellAi, { stroke: 'transparent' }),
   camera: NcCamera,
+  megaPhone: NcMegaPhone,
+  nocodb: NcNocoDB,
+  bulb: NcBulb,
 
   office: NcOffice,
   sort: Sort,
@@ -1077,6 +1094,10 @@ export const iconMap = {
   claude: NcClaude,
   ollama: NcOllama,
   groq: NcGroq,
+  refreshCw: NcRefreshCW,
+  iconReddit: NcRedditIcon,
+  iconTwitter: NcTwitterIcon,
+  iconDiscord: NcDiscordIcon,
 
   // Nc-IconsV2 Buttons
   ncColumns: NcColumnsIcon,
@@ -1338,6 +1359,11 @@ export const iconMap = {
   ncPlaceholderIcon: NcPlaceholderIcon,
   ncSpanner: NcSpanner,
   ncScript: NcScript,
+  youtube: NcYoutube2Icon,
+  ncAutoAwesome: h(NcAutoAwesome, { stroke: 'transparent' }),
+  ncPlusAi: h(NcPlusAi, { stroke: 'transparent' }),
+  ncPlusMultiple: NcPlusMultiple,
+  ncPlusSquareSolid: h(NcPlusSquareSolid, { stroke: 'transparent' }),
 }
 
 export const getMdiIcon = (type: string): any => {
@@ -3684,6 +3710,10 @@ export const searchableMap = {
   ncTrendingUp: {
     icon: NcTrendingUpIcon,
     keywords: ['Growth', 'Increase', 'Success', 'Chart', 'Upward'],
+  },
+  ncAutoAwesome: {
+    icon: h(NcAutoAwesome, { stroke: 'transparent' }),
+    keywords: ['Magic', 'ai', 'autoAwesome', 'awesome'],
   },
 }
 

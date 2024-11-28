@@ -25,6 +25,9 @@ export default class BaseUser {
   fk_user_id: string;
   roles?: string;
   invited_by?: string;
+  starred?: boolean;
+  order?: number;
+  hidden?: boolean;
 
   constructor(data: BaseUser) {
     Object.assign(this, data);
@@ -94,6 +97,9 @@ export default class BaseUser {
       'base_id',
       'roles',
       'invited_by',
+      'starred',
+      'order',
+      'hidden',
     ]);
 
     const { base_id, fk_user_id } = await ncMeta.metaInsert2(
@@ -127,7 +133,7 @@ export default class BaseUser {
     baseId: string,
     userId: string,
     ncMeta = Noco.ncMeta,
-  ) {
+  ): Promise<BaseUser & { is_mapped?: boolean }> {
     let baseUser =
       baseId &&
       userId &&
@@ -172,6 +178,13 @@ export default class BaseUser {
         );
       }
     }
+
+    // decide if user is mapped to base by checking if base_id is present
+    // base_id will be null if base_user entry is not present
+    if (baseUser) {
+      baseUser.is_mapped = !!baseUser.base_id;
+    }
+
     return this.castType(baseUser);
   }
 

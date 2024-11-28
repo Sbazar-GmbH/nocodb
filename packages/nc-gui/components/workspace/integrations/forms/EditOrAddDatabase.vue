@@ -28,8 +28,15 @@ const vOpen = useVModel(props, 'open', emit)
 
 const connectionType = computed(() => props.connectionType ?? ClientType.MYSQL)
 
-const { isFromIntegrationPage, pageMode, IntegrationsPageMode, activeIntegration, saveIntegration, updateIntegration } =
-  useIntegrationStore()
+const {
+  isFromIntegrationPage,
+  pageMode,
+  IntegrationsPageMode,
+  activeIntegration,
+  saveIntegration,
+  updateIntegration,
+  integrationsIconMap,
+} = useIntegrationStore()
 
 const isEditMode = computed(() => pageMode.value === IntegrationsPageMode.EDIT)
 
@@ -303,14 +310,30 @@ const createOrUpdateIntegration = async () => {
   }
 }
 
+// apply fix to config
+function applyConfigFix(fix: any) {
+  if (!fix) return
+
+  formState.value.dataSource = {
+    ...formState.value.dataSource,
+    ...fix,
+    connection: {
+      ...formState.value.dataSource.connection,
+      ...fix.connection,
+    },
+  }
+}
+
 const testConnectionError = ref()
 
-const testConnection = async () => {
+const testConnection = async (retry = 0, initialConfig = null) => {
   try {
     await validate()
   } catch (e) {
-    focusInvalidInput()
-    return
+    if (e.errorFields?.length) {
+      focusInvalidInput()
+      return
+    }
   }
 
   $e('a:source:create:extdb:test-connection', [])
@@ -343,11 +366,36 @@ const testConnection = async () => {
       }
     }
   } catch (e: any) {
+    // take a copy of the current config
+    const config = initialConfig || JSON.parse(JSON.stringify(formState.value.dataSource))
+    await handleConnectionError(e, retry, config)
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+const MAX_CONNECTION_RETRIES = 3
+
+async function handleConnectionError(e: any, retry: number, initialConfig: any): Promise<void> {
+  if (retry >= MAX_CONNECTION_RETRIES) {
     testSuccess.value = false
     testConnectionError.value = await extractSdkResponseErrorMsg(e)
+    // reset the connection config to initial state
+    formState.value.dataSource = initialConfig
+    return
   }
 
-  testingConnection.value = false
+  const fix = generateConfigFix(e)
+
+  if (fix) {
+    applyConfigFix(fix)
+    // Retry the connection after applying the fix
+    return testConnection(retry + 1, initialConfig)
+  }
+
+  // If no fix is available, or fix did not resolve the issue
+  testSuccess.value = false
+  testConnectionError.value = await extractSdkResponseErrorMsg(e)
 }
 
 const handleImportURL = async () => {
@@ -441,7 +489,7 @@ const activeIntegrationIcon = computed(() => {
     ? activeIntegration.value?.sub_type || activeIntegration.value?.config?.client
     : activeIntegration.value?.type
 
-  return allIntegrationsMapByValue[activeIntegrationType]?.icon
+  return integrationsIconMap[activeIntegrationType]
 })
 
 // reset test status on config change
@@ -520,7 +568,6 @@ watch(
         >
           <GeneralIcon icon="arrowLeft" />
         </NcButton>
-
         <div
           v-if="activeIntegrationIcon"
           class="h-8 w-8 flex items-center justify-center children:flex-none bg-gray-200 rounded-lg"
@@ -545,7 +592,7 @@ watch(
             :loading="testingConnection"
             :disabled="isLoading"
             icon-position="right"
-            @click="testConnection"
+            @click="testConnection()"
           >
             <template #icon>
               <GeneralIcon v-if="testSuccess" icon="circleCheckSolid" class="!text-green-700 w-4 h-4" />
@@ -566,7 +613,7 @@ watch(
           class="nc-extdb-btn-submit"
           @click="createOrUpdateIntegration"
         >
-          {{ pageMode === IntegrationsPageMode.ADD ? 'Create connection' : 'Modify connection' }}
+          {{ pageMode === IntegrationsPageMode.ADD ? 'Create connection' : 'Update connection' }}
         </NcButton>
         <NcButton size="small" type="text" @click="vOpen = false">
           <GeneralIcon icon="close" class="text-gray-600" />

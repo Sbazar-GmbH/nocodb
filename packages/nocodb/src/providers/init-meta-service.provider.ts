@@ -14,6 +14,7 @@ import { NcConfig, prepareEnv } from '~/utils/nc-config';
 import { MetaTable, RootScopes } from '~/utils/globals';
 import { updateMigrationJobsState } from '~/helpers/migrationJobs';
 import { initBaseBehavior } from '~/helpers/initBaseBehaviour';
+import initDataSourceEncryption from '~/helpers/initDataSourceEncryption';
 
 export const InitMetaServiceProvider: FactoryProvider = {
   // initialize app,
@@ -30,7 +31,7 @@ export const InitMetaServiceProvider: FactoryProvider = {
     const config = await NcConfig.createByEnv();
 
     // set version
-    process.env.NC_VERSION = '0111005';
+    process.env.NC_VERSION = '0258003';
 
     // set migration jobs version
     process.env.NC_MIGRATION_JOBS_VERSION = '2';
@@ -84,9 +85,6 @@ export const InitMetaServiceProvider: FactoryProvider = {
     Noco.config = config;
     Noco.eventEmitter = eventEmitter;
 
-    // decide base behavior based on env and database permissions
-    await initBaseBehavior();
-
     if (!instanceConfig) {
       // bump to latest version for fresh install
       await updateMigrationJobsState({
@@ -100,21 +98,27 @@ export const InitMetaServiceProvider: FactoryProvider = {
     // load super admin user from env if env is set
     await initAdminFromEnv(metaService);
 
-    // init plugin manager
-    await NcPluginMgrv2.init(Noco.ncMeta);
     await Noco.loadEEState();
-
-    if (process.env.NC_CLOUD === 'true') {
-      await populatePluginsForCloud({ ncMeta: Noco.ncMeta });
-    }
 
     // run upgrader
     await NcUpgrader.upgrade({ ncMeta: Noco._ncMeta });
 
+    // init plugin manager
+    await NcPluginMgrv2.init(Noco.ncMeta);
+
+    if (process.env.NC_CLOUD === 'true') {
+      await populatePluginsForCloud({ ncMeta: Noco.ncMeta });
+    }
     T.init({
       instance: getInstance,
     });
     T.emit('evt_app_started', await User.count());
+
+    // decide base behavior based on env and database permissions
+    await initBaseBehavior();
+
+    // encrypt datasource if secret is set
+    await initDataSourceEncryption(metaService);
 
     return metaService;
   },

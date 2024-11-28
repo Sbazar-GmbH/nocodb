@@ -23,6 +23,7 @@ export function extractDBError(error): {
   message: string;
   error: string;
   details?: any;
+  code?: string;
 } | void {
   if (!error.code) return;
 
@@ -448,6 +449,7 @@ export function extractDBError(error): {
     return {
       error: NcErrorType.DATABASE_ERROR,
       message,
+      code: error.code,
     };
   }
 }
@@ -487,6 +489,15 @@ export class ExternalError extends NcBaseError {
 export class ExternalTimeout extends ExternalError {}
 
 export class UnprocessableEntity extends NcBaseError {}
+
+export class TestConnectionError extends NcBaseError {
+  public sql_code?: string;
+
+  constructor(message: string, sql_code?: string) {
+    super(message);
+    this.sql_code = sql_code;
+  }
+}
 
 export class AjvError extends NcBaseError {
   constructor(param: { message: string; errors: ErrorObject[] }) {
@@ -636,12 +647,23 @@ const errorHelpers: {
     code: 400,
   },
   [NcErrorType.FORMULA_ERROR]: {
-    message: (message: string) => `Formula error: ${message}`,
+    message: (message: string) => {
+      // try to extract db error - Experimental
+      if (message.includes(' - ')) {
+        const [_, dbError] = message.split(' - ');
+        return `Formula error: ${dbError}`;
+      }
+      return `Formula error: ${message}`;
+    },
     code: 400,
   },
   [NcErrorType.PERMISSION_DENIED]: {
     message: 'Permission denied',
     code: 403,
+  },
+  [NcErrorType.INVALID_ATTACHMENT_UPLOAD_SCOPE]: {
+    message: 'Invalid attachment upload scope',
+    code: 400,
   },
 };
 
@@ -719,6 +741,7 @@ export class NcError {
       },
     });
   }
+
   static authenticationRequired(args?: NcErrorArgs) {
     throw new NcBaseErrorv2(NcErrorType.AUTHENTICATION_REQUIRED, args);
   }
@@ -788,22 +811,43 @@ export class NcError {
     id: string | string[] | Record<string, string> | Record<string, string>[],
     args?: NcErrorArgs,
   ) {
+    let formatedId: string | string[] = '';
     if (!id) {
-      id = 'unknown';
+      formatedId = 'unknown';
     } else if (typeof id === 'string') {
-      id = [id];
+      formatedId = [id];
     } else if (Array.isArray(id)) {
       if (id.every((i) => typeof i === 'string')) {
-        id = id as string[];
+        formatedId = id as string[];
       } else {
-        id = id.map((i) => Object.values(i).join('___'));
+        formatedId = id.map((val) => {
+          const idsArr = Object.values(val);
+          if (idsArr.length > 1) {
+            return idsArr
+              .map((idVal) => idVal?.toString?.().replaceAll('_', '\\_'))
+              .join('___');
+          } else if (idsArr.length) {
+            return idsArr[0] as any;
+          } else {
+            return 'unknown';
+          }
+        });
       }
     } else {
-      id = Object.values(id).join('___');
+      const idsArr = Object.values(id);
+      if (idsArr.length > 1) {
+        formatedId = idsArr
+          .map((idVal) => idVal?.toString?.().replaceAll('_', '\\_'))
+          .join('___');
+      } else if (idsArr.length) {
+        formatedId = idsArr[0] as any;
+      } else {
+        formatedId = 'unknown';
+      }
     }
 
     throw new NcBaseErrorv2(NcErrorType.RECORD_NOT_FOUND, {
-      params: id,
+      params: formatedId,
       ...args,
     });
   }
@@ -921,6 +965,10 @@ export class NcError {
     throw new UnprocessableEntity(message);
   }
 
+  static testConnectionError(message = 'Unprocessable entity', code?: string) {
+    throw new TestConnectionError(message, code);
+  }
+
   static notAllowed(message = 'Not allowed') {
     throw new NotAllowed(message);
   }
@@ -974,5 +1022,9 @@ export class NcError {
       },
       ...(args || {}),
     });
+  }
+
+  static invalidAttachmentUploadScope(args?: NcErrorArgs) {
+    throw new NcBaseErrorv2(NcErrorType.INVALID_ATTACHMENT_UPLOAD_SCOPE, args);
   }
 }

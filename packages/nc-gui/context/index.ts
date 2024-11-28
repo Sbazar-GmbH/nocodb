@@ -30,6 +30,7 @@ export const ReloadViewDataHookInj: InjectionKey<
   EventHook<{ shouldShowLoading?: boolean; offset?: number; isFormFieldFilters?: boolean } | void>
 > = Symbol('reload-view-data-injection')
 export const ReloadViewMetaHookInj: InjectionKey<EventHook<boolean | void>> = Symbol('reload-view-meta-injection')
+export const ReloadVisibleDataHookInj: InjectionKey<EventHook<void>> = Symbol('reload-visible-data-injection')
 export const ReloadRowDataHookInj: InjectionKey<EventHook<{ shouldShowLoading?: boolean; offset?: number } | void>> =
   Symbol('reload-row-data-injection')
 export const ReloadAggregateHookInj: InjectionKey<
@@ -87,3 +88,5 @@ export const ActiveSourceInj: InjectionKey<
 > = Symbol('active-source-injection')
 
 export const IsToolbarIconMode: InjectionKey<ComputedRef<boolean>> = Symbol('toolbar-icon-mode-injection')
+export const FieldNameAlias: InjectionKey<ComputedRef<Record<string, string>> | Ref<Record<string, string>>> =
+  Symbol('field-name-alias')

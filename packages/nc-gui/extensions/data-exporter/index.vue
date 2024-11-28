@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import { type ViewType, ViewTypes } from 'nocodb-sdk'
+import { SupportedExportCharset, type ViewType, ViewTypes, charsetOptions, csvColumnSeparatorOptions } from 'nocodb-sdk'
 
 const jobStatusTooltip = {
   [JobStatus.COMPLETED]: 'Export successful',
@@ -10,6 +10,17 @@ const jobStatusTooltip = {
 const { $api, $poller } = useNuxtApp()
 
 const { appInfo } = useGlobal()
+
+const router = useRouter()
+const route = router.currentRoute
+
+const activeTableId = computed(() => route.value.params.viewId as string | undefined)
+
+const activeViewTitleOrId = computed(() => {
+  return route.value.params.viewTitle
+})
+
+const { eventBus } = useExtensions()
 
 const { extension, tables, fullscreen, getViewsForTable } = useExtensionHelperOrThrow()
 
@@ -30,9 +41,17 @@ const exportedFiles = computed(() => {
         job.job === 'data-export' && job.result?.extension_id === extension.value.id && !deletedExports.value.includes(job.id),
     )
     .map((job) => {
+      const isNew = job.result?.timestamp ? dayjs().diff(job.result?.timestamp) < 10000 : false
+
       return {
         ...job,
-        result: (job.result || {}) as { url: string; type: 'csv' | 'json' | 'xlsx'; title: string; timestamp: number },
+        result: { ...(job.result || {}), isNew } as {
+          url: string
+          type: 'csv' | 'json' | 'xlsx'
+          title: string
+          timestamp: number
+          isNew: boolean
+        },
       }
     })
     .sort((a, b) => dayjs(b.created_at).unix() - dayjs(a.created_at).unix())
@@ -41,7 +60,12 @@ const exportedFiles = computed(() => {
 const exportPayload = ref<{
   tableId?: string
   viewId?: string
-}>({})
+  delimiter?: string
+  encoding?: SupportedExportCharset
+}>({
+  delimiter: ',',
+  encoding: SupportedExportCharset['utf-8'],
+})
 
 const tableList = computed(() => {
   return tables.value.map((table) => {
@@ -75,16 +99,29 @@ const reloadViews = async () => {
   }
 }
 
-const onTableSelect = async (tableId: string) => {
-  exportPayload.value.tableId = tableId
-  await reloadViews()
-  exportPayload.value.viewId = views.value.find((view) => view.is_default)?.id
+const saveChanges = async () => {
   await extension.value.kvStore.set('exportPayload', exportPayload.value)
+}
+
+const onTableSelect = async (tableId?: string) => {
+  if (!tableId) {
+    exportPayload.value.tableId = activeTableId.value
+    await reloadViews()
+    exportPayload.value.viewId = activeViewTitleOrId.value
+      ? views.value.find((view) => view.id === activeViewTitleOrId.value)?.id
+      : views.value.find((view) => view.is_default)?.id
+  } else {
+    exportPayload.value.tableId = tableId
+    await reloadViews()
+    exportPayload.value.viewId = views.value.find((view) => view.is_default)?.id
+  }
+
+  await saveChanges()
 }
 
 const onViewSelect = async (viewId: string) => {
   exportPayload.value.viewId = viewId
-  await extension.value.kvStore.set('exportPayload', exportPayload.value)
+  await saveChanges()
 }
 
 const isExporting = ref(false)
@@ -95,7 +132,11 @@ async function exportDataAsync() {
 
     isExporting.value = true
 
-    const jobData = await $api.export.data(exportPayload.value.viewId, 'csv', { extension_id: extension.value.id })
+    const jobData = await $api.export.data(exportPayload.value.viewId, 'csv', {
+      extension_id: extension.value.id,
+      delimiter: exportPayload.value.delimiter,
+      encoding: exportPayload.value.encoding,
+    })
     jobList.value.unshift(jobData)
 
     $poller.subscribe(
@@ -194,11 +235,30 @@ const filterOption = (input: string, option: { key: string }) => {
   return option.key?.toLowerCase()?.includes(input?.toLowerCase())
 }
 
-onMounted(() => {
+eventBus.on(async (event, payload) => {
+  if (event === ExtensionsEvents.CLEARDATA && payload && extension.value.id && payload === extension.value.id) {
+    const deleteExportsPayload = exportedFiles.value.map((exp) => exp.id)
+
+    if (deleteExportsPayload.length) {
+      deletedExports.value.push(...deleteExportsPayload)
+      await extension.value.kvStore.set('deletedExports', deletedExports.value)
+    }
+  }
+})
+
+onMounted(async () => {
   exportPayload.value = extension.value.kvStore.get('exportPayload') || {}
+  exportPayload.value.delimiter = exportPayload.value.delimiter || ','
+  exportPayload.value.encoding = exportPayload.value.encoding || SupportedExportCharset['utf-8']
+
   deletedExports.value = extension.value.kvStore.get('deletedExports') || []
-  reloadViews()
-  loadJobsForBase()
+
+  await reloadViews()
+  await loadJobsForBase()
+
+  if (!exportPayload.value.tableId && tableList.value.find((table) => table.value === activeTableId.value)) {
+    onTableSelect()
+  }
 })
 </script>
 
@@ -208,119 +268,199 @@ onMounted(() => {
       ref="dataExporterRef"
       class="data-exporter"
       :class="{
-        'p-4': fullscreen,
-        'p-3': !fullscreen,
+        'bg-nc-bg-gray-extralight': fullscreen,
       }"
     >
-      <div class="pb-3 flex items-center justify-between gap-2.5 flex-wrap">
-        <div
-          class="flex-1 flex items-center"
-          :class="{
-            'max-w-[min(350px,calc(100%-124px))]': isExporting && !fullscreen && width > 325,
-            'max-w-[min(350px,calc(100%_-_84px))]': !isExporting && !fullscreen && width > 325,
-            'max-w-full': width <= 325,
-            'max-w-[480px]': fullscreen,
-          }"
-        >
-          <div
-            class="flex-1 flex items-center border-1 border-gray-200 rounded-lg focus-within:(border-brand-500 shadow-selected) transition-colors transition-shadow"
-          >
-            <NcSelect
-              v-model:value="exportPayload.tableId"
-              placeholder="-select table-"
-              :disabled="isExporting"
-              class="nc-data-exporter-table-select"
-              :class="{
-                'flex-1 max-w-[240px]': fullscreen,
-                'min-w-1/2 max-w-[175px]': !fullscreen,
-              }"
-              :bordered="false"
-              :filter-option="filterOption"
-              dropdown-class-name="w-[250px]"
-              show-search
-              @change="onTableSelect"
-            >
-              <a-select-option v-for="table of tableList" :key="table.label" :value="table.value">
-                <div class="w-full flex items-center gap-2">
-                  <div class="min-w-5 flex items-center justify-center">
-                    <GeneralTableIcon :meta="{ meta: table.meta }" class="text-gray-500" />
+      <div
+        class="p-3 flex flex-col gap-3"
+        :class="{
+          'bg-white': fullscreen,
+        }"
+      >
+        <div v-if="fullscreen" class="flex items-center gap-3 max-w-full">
+          <div class="flex flex-col gap-2 w-[calc(50%_-_6px)]">
+            <div>Separator</div>
+            <a-form-item class="!my-0 flex-1">
+              <NcSelect
+                v-model:value="exportPayload.delimiter"
+                placeholder="-select separator-"
+                :disabled="isExporting"
+                class="nc-data-exporter-separator nc-select-shadow"
+                dropdown-class-name="w-[180px]"
+                @change="saveChanges"
+              >
+                <a-select-option v-for="delimiter of csvColumnSeparatorOptions" :key="delimiter.value" :value="delimiter.value">
+                  <div class="w-full flex items-center gap-2">
+                    <NcTooltip class="flex-1 truncate" show-on-truncate-only>
+                      <template #title>{{ delimiter.label }}</template>
+                      <span>{{ delimiter.label }}</span>
+                    </NcTooltip>
+                    <component
+                      :is="iconMap.check"
+                      v-if="exportPayload.delimiter === delimiter.value"
+                      id="nc-selected-item-icon"
+                      class="flex-none text-primary w-4 h-4"
+                    />
                   </div>
-                  <NcTooltip class="flex-1 truncate" show-on-truncate-only>
-                    <template #title>{{ table.label }}</template>
-                    <span>{{ table.label }}</span>
-                  </NcTooltip>
-                  <component
-                    :is="iconMap.check"
-                    v-if="exportPayload.tableId === table.value"
-                    id="nc-selected-item-icon"
-                    class="flex-none text-primary w-4 h-4"
-                  />
-                </div>
-              </a-select-option>
-            </NcSelect>
-            <div class="flex-none h-8 border-l-1 border-gray-200"></div>
-
-            <NcSelect
-              v-model:value="exportPayload.viewId"
-              placeholder="-select view-"
-              :disabled="isExporting"
-              class="nc-data-exporter-view-select"
-              :class="{
-                'flex-1 max-w-[240px]': fullscreen,
-                'min-w-1/2 max-w-[175px]': !fullscreen,
-              }"
-              :bordered="false"
-              dropdown-class-name="w-[250px]"
-              :filter-option="filterOption"
-              show-search
-              @change="onViewSelect"
-            >
-              <a-select-option v-for="view of viewList" :key="view.label" :value="view.value">
-                <div class="w-full flex items-center gap-2">
-                  <div class="min-w-5 flex items-center justify-center">
-                    <GeneralViewIcon :meta="{ meta: view.meta, type: view.type }" class="flex-none text-gray-500" />
+                </a-select-option>
+              </NcSelect>
+            </a-form-item>
+          </div>
+          <div class="flex flex-col gap-2 w-[calc(50%_-_6px)]">
+            <div class="min-w-[65px]">Encoding</div>
+            <a-form-item class="!my-0 flex-1">
+              <NcSelect
+                v-model:value="exportPayload.encoding"
+                placeholder="-select encoding-"
+                class="nc-data-exporter-encoding nc-select-shadow"
+                dropdown-class-name="w-[190px]"
+                :filter-option="filterOption"
+                show-search
+                @change="saveChanges"
+              >
+                <a-select-option v-for="encoding of charsetOptions" :key="encoding.label" :value="encoding.value">
+                  <div class="w-full flex items-center gap-2">
+                    <NcTooltip class="flex-1 truncate" show-on-truncate-only>
+                      <template #title>{{ encoding.label }}</template>
+                      <span>{{ encoding.label }}</span>
+                    </NcTooltip>
+                    <component
+                      :is="iconMap.check"
+                      v-if="exportPayload.encoding === encoding.value"
+                      id="nc-selected-item-icon"
+                      class="flex-none text-primary w-4 h-4"
+                    />
                   </div>
-                  <NcTooltip class="flex-1 truncate" show-on-truncate-only>
-                    <template #title>{{ view.label }}</template>
-                    <span>{{ view.label }}</span>
-                  </NcTooltip>
-                  <component
-                    :is="iconMap.check"
-                    v-if="exportPayload.viewId === view.value"
-                    id="nc-selected-item-icon"
-                    class="flex-none text-primary w-4 h-4"
-                  />
-                </div> </a-select-option
-            ></NcSelect>
+                </a-select-option>
+              </NcSelect>
+            </a-form-item>
           </div>
         </div>
-        <div class="flex-none flex justify-end">
-          <NcTooltip class="flex" placement="topRight" :disabled="!isExporting">
-            <template #title> The CSV file is being prepared in the background. You'll be notified once it's ready. </template>
-            <NcButton :disabled="!exportPayload?.viewId" :loading="isExporting" size="xs" @click="exportDataAsync">{{
-              isExporting ? 'Generating' : 'Export'
-            }}</NcButton>
-          </NcTooltip>
+        <div class="flex items-center justify-between gap-2.5 flex-wrap">
+          <div
+            class="nc-data-exporter-select-wrapper flex-1 flex items-center border-1 border-nc-border-gray-medium rounded-lg relative shadow-default"
+            :class="{
+              'max-w-[min(350px,calc(100%-124px))]': isExporting && !fullscreen && width > 325,
+              'max-w-[min(350px,calc(100%_-_76px))]': !isExporting && !fullscreen && width > 325,
+              'max-w-full': width <= 325,
+              'max-w-[480px]': fullscreen,
+            }"
+          >
+            <a-form-item
+              class="!my-0"
+              :class="{
+                'flex-1 max-w-[240px]': fullscreen,
+                'min-w-1/2 max-w-[175px]': !fullscreen,
+              }"
+            >
+              <NcSelect
+                v-model:value="exportPayload.tableId"
+                placeholder="-select table-"
+                :disabled="isExporting"
+                class="nc-data-exporter-table-select nc-select-shadow"
+                :filter-option="filterOption"
+                dropdown-class-name="w-[250px]"
+                show-search
+                @change="onTableSelect"
+              >
+                <a-select-option v-for="table of tableList" :key="table.label" :value="table.value">
+                  <div class="w-full flex items-center gap-2">
+                    <div class="min-w-5 flex items-center justify-center">
+                      <GeneralTableIcon :meta="{ meta: table.meta }" class="text-gray-500" />
+                    </div>
+                    <NcTooltip class="flex-1 truncate" show-on-truncate-only>
+                      <template #title>{{ table.label }}</template>
+                      <span>{{ table.label }}</span>
+                    </NcTooltip>
+                    <component
+                      :is="iconMap.check"
+                      v-if="exportPayload.tableId === table.value"
+                      id="nc-selected-item-icon"
+                      class="flex-none text-primary w-4 h-4"
+                    />
+                  </div>
+                </a-select-option>
+              </NcSelect>
+            </a-form-item>
+
+            <a-form-item
+              class="!my-0"
+              :class="{
+                'flex-1 max-w-[240px]': fullscreen,
+                'min-w-1/2 max-w-[175px]': !fullscreen,
+              }"
+            >
+              <NcSelect
+                v-model:value="exportPayload.viewId"
+                placeholder="-select view-"
+                :disabled="isExporting"
+                class="nc-data-exporter-view-select nc-select-shadow"
+                dropdown-class-name="w-[250px]"
+                :filter-option="filterOption"
+                show-search
+                placement="bottomRight"
+                @change="onViewSelect"
+              >
+                <a-select-option v-for="view of viewList" :key="view.label" :value="view.value">
+                  <div class="w-full flex items-center gap-2">
+                    <div class="min-w-5 flex items-center justify-center">
+                      <GeneralViewIcon :meta="{ meta: view.meta, type: view.type }" class="flex-none text-gray-500" />
+                    </div>
+                    <NcTooltip class="flex-1 truncate" show-on-truncate-only>
+                      <template #title>{{ view.label }}</template>
+                      <span>{{ view.label }}</span>
+                    </NcTooltip>
+                    <component
+                      :is="iconMap.check"
+                      v-if="exportPayload.viewId === view.value"
+                      id="nc-selected-item-icon"
+                      class="flex-none text-primary w-4 h-4"
+                    />
+                  </div> </a-select-option
+              ></NcSelect>
+            </a-form-item>
+          </div>
+          <div class="flex-none flex justify-end">
+            <NcTooltip class="flex" placement="topRight" :disabled="!isExporting">
+              <template #title> The CSV file is being prepared in the background. You'll be notified once it's ready. </template>
+              <NcButton
+                :disabled="!exportPayload?.viewId || isExporting"
+                :loading="isExporting"
+                size="small"
+                @click="exportDataAsync"
+                >{{ isExporting ? 'Generating' : 'Export' }}</NcButton
+              >
+            </NcTooltip>
+          </div>
         </div>
       </div>
-      <div class="data-exporter-body flex-1 flex flex-col">
+      <div
+        class="data-exporter-body flex-1 flex flex-col"
+        :class="{
+          'rounded-lg border-1 m-3': fullscreen,
+        }"
+      >
         <div class="data-exporter-header">Recent Exports</div>
         <div v-if="exportedFiles.length" class="flex-1 flex flex-col nc-scrollbar-thin max-h-[calc(100%_-_25px)]">
           <template v-for="exp of exportedFiles">
             <div
               v-if="exp.status === JobStatus.COMPLETED ? exp.result : true"
               :key="exp.id"
-              class="p-3 flex gap-2 justify-between border-b-1 hover:bg-gray-50"
+              class="p-3 flex gap-2 justify-between border-b-1"
               :class="{
                 'px-4 py-3': fullscreen,
                 'px-3 py-2': !fullscreen,
+                'bg-white hover:bg-gray-50': exp.status === JobStatus.COMPLETED,
+                'bg-nc-bg-red-light': exp.status !== JobStatus.COMPLETED,
               }"
             >
               <div
                 class="flex-1 flex items-start gap-3"
                 :class="{
-                  'max-w-[calc(100%_-_74px)]': exp.status === JobStatus.COMPLETED,
-                  'max-w-[calc(100%_-_38px)]': exp.status !== JobStatus.COMPLETED,
+                  'max-w-[calc(100%_-_74px)]': exp.status === JobStatus.COMPLETED && !exp.result.isNew,
+                  'max-w-[calc(100%_-_113px)]': exp.status === JobStatus.COMPLETED && exp.result.isNew,
+                  'max-w-[calc(100%_-_48px)]': exp.status !== JobStatus.COMPLETED && !exp.result.isNew,
+                  'max-w-[calc(100%_-_85px)]': exp.status !== JobStatus.COMPLETED && exp.result.isNew,
                 }"
               >
                 <NcTooltip v-if="[JobStatus.COMPLETED, JobStatus.FAILED].includes(exp.status)" class="flex">
@@ -359,6 +499,11 @@ onMounted(() => {
                 </div>
               </div>
 
+              <div v-if="exp.result.isNew" class="flex h-7 flex items-center">
+                <NcBadge color="green" :border="false" class="!bg-nc-bg-green-light !text-nc-content-green-dark">{{
+                  $t('general.new')
+                }}</NcBadge>
+              </div>
               <div v-if="exp.status === JobStatus.COMPLETED" class="flex" @click="handleDownload(urlHelper(exp.result.url))">
                 <NcTooltip class="flex">
                   <template #title>
@@ -387,35 +532,81 @@ onMounted(() => {
             </div>
           </template>
         </div>
-        <div v-else class="px-3 py-2 flex-1 flex items-center justify-center text-gray-600">No exports</div>
+        <div v-else class="px-3 py-2 flex-1 flex items-center justify-center text-gray-800">
+          <a-empty
+            :image-style="{
+              height: '24px',
+            }"
+            :image="Empty.PRESENTED_IMAGE_SIMPLE"
+            description="No exports"
+            class="!my-0"
+          />
+        </div>
       </div>
     </div>
   </ExtensionsExtensionWrapper>
 </template>
 
 <style lang="scss" scoped>
-:deep(.extension-content-container) {
-  @apply !p-0;
-}
 .data-exporter {
   @apply flex flex-col overflow-hidden h-full;
   .data-exporter-header {
     @apply px-3 py-1 bg-gray-100 text-[11px] leading-4 text-gray-600 border-b-1;
   }
 
-  // .nc-data-exporter-table-select {
-  //   :deep(.ant-select-selector) {
-  //     @apply !border-r-1 rounded-lg !rounded-r-none shadow-none;
-  //   }
-  // }
-  // .nc-data-exporter-view-select {
-  //   :deep(.ant-select-selector) {
-  //     @apply !border-l-0 rounded-lg !rounded-l-none shadow-none;
-  //   }
-  // }
+  .nc-data-exporter-select-wrapper {
+    &:not(:focus-within) {
+      &::after {
+        @apply absolute left-1/2 h-full content-[''] border-r-1 border-nc-border-gray-medium;
+      }
+    }
+  }
+
+  :deep(.nc-data-exporter-table-select.ant-select) {
+    &.ant-select-focused {
+      .ant-select-selector {
+        @apply z-10 !rounded-r-lg;
+      }
+    }
+
+    &:not(.ant-select-focused) {
+      .ant-select-selector {
+        @apply !border-transparent !shadow-none;
+      }
+    }
+
+    .ant-select-selector {
+      @apply relative !rounded-lg !text-sm;
+    }
+  }
+
+  :deep(.nc-data-exporter-view-select.ant-select) {
+    &.ant-select-focused {
+      .ant-select-selector {
+        @apply z-10 !rounded-l-lg;
+      }
+    }
+
+    &:not(.ant-select-focused) {
+      .ant-select-selector {
+        @apply !border-transparent !shadow-none;
+      }
+    }
+
+    .ant-select-selector {
+      @apply relative !rounded-lg !text-sm;
+    }
+  }
+
+  :deep(.nc-data-exporter-separator.ant-select),
+  :deep(.nc-data-exporter-encoding.ant-select) {
+    .ant-select-selector {
+      @apply !rounded-lg h-8;
+    }
+  }
 
   .data-exporter-body {
-    @apply flex-1 rounded-lg border-1 overflow-hidden;
+    @apply flex-1 overflow-hidden;
   }
 
   .data-exporter-footer {
@@ -424,7 +615,7 @@ onMounted(() => {
 }
 </style>
 
-<style>
+<style lang="scss">
 .nc-nc-data-exporter .extension-content {
   @apply !p-0;
 }

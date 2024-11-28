@@ -1,6 +1,10 @@
 import { UITypes } from 'nocodb-sdk';
-import type { BoolType, FilterType } from 'nocodb-sdk';
-import type { COMPARISON_OPS, COMPARISON_SUB_OPS } from '~/utils/globals';
+import type {
+  BoolType,
+  COMPARISON_OPS,
+  COMPARISON_SUB_OPS,
+  FilterType,
+} from 'nocodb-sdk';
 import type { NcContext } from '~/interface/config';
 import Model from '~/models/Model';
 import Column from '~/models/Column';
@@ -171,9 +175,14 @@ export default class Filter implements FilterType {
     filter: Partial<FilterType>,
     ncMeta = Noco.ncMeta,
   ) {
-    if (!(id && (filter.fk_view_id || filter.fk_hook_id))) {
+    if (
+      !(
+        id &&
+        (filter.fk_view_id || filter.fk_hook_id || filter.fk_parent_column_id)
+      )
+    ) {
       throw new Error(
-        `Mandatory fields missing in FILTER_EXP cache population : id(${id}), fk_view_id(${filter.fk_view_id}), fk_hook_id(${filter.fk_hook_id})`,
+        `Mandatory fields missing in FILTER_EXP cache population : id(${id}), fk_view_id(${filter.fk_view_id}), fk_hook_id(${filter.fk_hook_id}), fk_parent_column_id(${filter.fk_parent_column_id})`,
       );
     }
     const key = `${CacheScope.FILTER_EXP}:${id}`;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   AppEvents,
   extractRolesObj,
@@ -26,6 +26,8 @@ import { sanitiseEmailContent } from '~/utils';
 
 @Injectable()
 export class BaseUsersService {
+  private readonly logger = new Logger(BaseUsersService.name);
+
   constructor(protected appHooksService: AppHooksService) {}
 
   async userList(
@@ -113,18 +115,28 @@ export class BaseUsersService {
           return NcError.baseNotFound(param.baseId);
         }
 
-        if (baseUser && baseUser.roles) {
+        // if already exists and has a role then throw error
+        if (baseUser?.is_mapped && baseUser?.roles) {
           NcError.badRequest(
             `${user.email} with role ${baseUser.roles} already exists in this base`,
           );
         }
-
-        await BaseUser.insert(context, {
-          base_id: param.baseId,
-          fk_user_id: user.id,
-          roles: param.baseUser.roles || 'editor',
-          invited_by: param.req?.user?.id,
-        });
+        // if user exist and role is not assigned then assign role by updating base user
+        else if (baseUser?.is_mapped) {
+          await BaseUser.updateRoles(
+            context,
+            param.baseId,
+            user.id,
+            param.baseUser.roles,
+          );
+        } else {
+          await BaseUser.insert(context, {
+            base_id: param.baseId,
+            fk_user_id: user.id,
+            roles: param.baseUser.roles || 'editor',
+            invited_by: param.req?.user?.id,
+          });
+        }
 
         this.appHooksService.emit(AppEvents.PROJECT_INVITE, {
           base,
@@ -161,17 +173,31 @@ export class BaseUsersService {
           });
 
           // in case of single user check for smtp failure
-          // and send back token if failed
-          if (
-            emails.length === 1 &&
-            !(await this.sendInviteEmail(email, invite_token, param.req))
-          ) {
-            return { invite_token, email };
+          // and send back token if email not configured
+          if (emails.length === 1) {
+            // variable to keep invite mail send status
+            const mailSendStatus = await this.sendInviteEmail({
+              email,
+              token: invite_token,
+              req: param.req,
+              baseName: base.title,
+              roles: param.baseUser.roles || 'editor',
+            });
+
+            if (!mailSendStatus) {
+              return { invite_token, email };
+            }
           } else {
-            this.sendInviteEmail(email, invite_token, param.req);
+            await this.sendInviteEmail({
+              email,
+              token: invite_token,
+              req: param.req,
+              baseName: base.title,
+              roles: param.baseUser.roles || 'editor',
+            });
           }
         } catch (e) {
-          console.log(e);
+          this.logger.error(e.message, e.stack);
           if (emails.length === 1) {
             throw e;
           } else {
@@ -376,6 +402,8 @@ export class BaseUsersService {
       invite_token_expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
 
+    const baseUser = await BaseUser.get(context, param.baseId, user.id);
+
     const pluginData = await Noco.ncMeta.metaGet2(
       context.workspace_id,
       context.base_id,
@@ -392,7 +420,13 @@ export class BaseUsersService {
       );
     }
 
-    await this.sendInviteEmail(user.email, invite_token, param.req);
+    await this.sendInviteEmail({
+      email: user.email,
+      token: invite_token,
+      req: param.req,
+      baseName: base.title,
+      roles: baseUser?.roles || 'editor',
+    });
 
     this.appHooksService.emit(AppEvents.PROJECT_USER_RESEND_INVITE, {
       base,
@@ -406,13 +440,34 @@ export class BaseUsersService {
     return true;
   }
 
-  // todo: refactor the whole function
-  async sendInviteEmail(email: string, token: string, req: any): Promise<any> {
+  async sendInviteEmail({
+    email,
+    token,
+    req,
+    baseName,
+    roles,
+    useOrgTemplate,
+  }: {
+    email: string;
+    token: string;
+    req: NcRequest;
+    baseName?: string;
+    roles: string;
+    useOrgTemplate?: boolean;
+  }): Promise<any> {
     try {
-      const template = (
-        await import('~/services/base-users/ui/emailTemplates/invite')
-      ).default;
+      let template: string;
 
+      // if useOrgTemplate is true then use org template
+      if (useOrgTemplate) {
+        template = (
+          await import('~/services/base-users/ui/emailTemplates/org-invite')
+        ).default;
+      } else {
+        template = (
+          await import('~/services/base-users/ui/emailTemplates/invite')
+        ).default;
+      }
       const emailAdapter = await NcPluginMgrv2.emailAdapter();
 
       if (emailAdapter) {
@@ -423,9 +478,9 @@ export class BaseUsersService {
             signupLink: `${req.ncSiteUrl}${
               Noco.getConfig()?.dashboardPath
             }#/signup/${token}`,
-            baseName: sanitiseEmailContent(req.body?.baseName),
+            baseName: sanitiseEmailContent(baseName || req.body?.baseName),
             roles: sanitiseEmailContent(
-              (req.body?.roles || '')
+              (roles || req.body?.roles || '')
                 .split(',')
                 .map((r) => r.replace(/^./, (m) => m.toUpperCase()))
                 .join(', '),
@@ -436,10 +491,10 @@ export class BaseUsersService {
         return true;
       }
     } catch (e) {
-      console.log(
-        'Warning : `mailSend` failed, Please configure emailClient configuration.',
-        e.message,
+      this.logger.warn(
+        'Warning : `mailSend` failed, Please re-configure emailClient configuration.',
       );
+      this.logger.error(e.message, e.stack);
       throw e;
     }
   }
@@ -461,7 +516,9 @@ export class BaseUsersService {
 
     if (Object.keys(baseUserData).length) {
       // create new base user if it doesn't exist
-      if (!(await BaseUser.get(context, param.baseId, param.user?.id))) {
+      if (
+        !(await BaseUser.get(context, param.baseId, param.user?.id))?.is_mapped
+      ) {
         await BaseUser.insert(context, {
           ...baseUserData,
           base_id: param.baseId,

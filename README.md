@@ -51,29 +51,27 @@ NocoDB is the fastest and easiest way to build databases online.
 
 [![Stargazers repo roster for @nocodb/nocodb](http://reporoster.com/stars/nocodb/nocodb)](https://github.com/nocodb/nocodb/stargazers)
 
-
 # Installation
-
 
 ## Docker with SQLite
 
 ```bash 
-docker run -d --name noco 
-           -v "$(pwd)"/nocodb:/usr/app/data/ 
-           -p 8080:8080 
-           nocodb/nocodb:latest
-```
+docker run -d \
+  --name noco \
+  -v "$(pwd)"/nocodb:/usr/app/data/ \
+  -p 8080:8080 \
+  nocodb/nocodb:latest
+  ```
 
 ## Docker with PG
 ```bash
-docker run -d --name noco 
-           -v "$(pwd)"/nocodb:/usr/app/data/ 
-           -p 8080:8080 
-            # replace with your pg connection string
-           -e NC_DB="pg://host.docker.internal:5432?u=root&p=password&d=d1" 
-           # replace with a random secret
-           -e NC_AUTH_JWT_SECRET="569a1821-0a93-45e8-87ab-eb857f20a010"  
-           nocodb/nocodb:latest
+docker run -d \
+  --name noco \
+  -v "$(pwd)"/nocodb:/usr/app/data/ \
+  -p 8080:8080 \
+  -e NC_DB="pg://host.docker.internal:5432?u=root&p=password&d=d1" \
+  -e NC_AUTH_JWT_SECRET="569a1821-0a93-45e8-87ab-eb857f20a010" \
+  nocodb/nocodb:latest
 ```
 
 ## Auto-upstall
@@ -92,7 +90,6 @@ Auto-upstall does the following : 🕊
 > install.nocodb.com/noco.sh script can be found [here in our github](https://raw.githubusercontent.com/nocodb/nocodb/develop/docker-compose/1_Auto_Upstall/noco.sh)
 
 
-
 ## Other Methods
 
 > Binaries are only for quick testing locally.
@@ -103,11 +100,13 @@ Auto-upstall does the following : 🕊
 | 🍏 MacOS x64 <br>(Binary)     | `curl http://get.nocodb.com/macos-x64 -o nocodb -L && chmod +x nocodb && ./nocodb`                                                                                                                                                                                                                                                                                         |
 | 🐧 Linux arm64 <br>(Binary)   | `curl http://get.nocodb.com/linux-arm64 -o nocodb -L && chmod +x nocodb && ./nocodb`                                                                                                                                                                                                                                                                                       |
 | 🐧 Linux x64 <br>(Binary)     | `curl http://get.nocodb.com/linux-x64 -o nocodb -L && chmod +x nocodb && ./nocodb`                                                                                                                                                                                                                                                                                         |
-| 🪟 Windows arm64 <br>(Binary) | `iwr http://get.nocodb.com/win-arm64.exe -o Noco-win-arm64.exe && .\Noco-win-arm64.exe`                                                                                                                                                                                                                                                                                    |
-| 🪟 Windows x64 <br>(Binary)   | `iwr http://get.nocodb.com/win-x64.exe -o Noco-win-x64.exe && .\Noco-win-x64.exe`                                                                                                                                                                                                                                                                                          |
+| 🪟 Windows arm64 <br>(Binary) | `iwr http://get.nocodb.com/win-arm64.exe -OutFile Noco-win-arm64.exe && .\Noco-win-arm64.exe`                                                                                                                                                                                                                                                                                    |
+| 🪟 Windows x64 <br>(Binary)   | `iwr http://get.nocodb.com/win-x64.exe -OutFile Noco-win-x64.exe && .\Noco-win-x64.exe`                                                                                                                                                                                                                                                                                          |
 
 
 > When running locally access nocodb by visiting: [http://localhost:8080/dashboard](http://localhost:8080/dashboard)
+
+For more installation methods, please refer to [our docs](https://docs.nocodb.com/category/installation)
 
 # Screenshots
 ![2](https://github.com/nocodb/nocodb/assets/86527202/a127c05e-2121-4af2-a342-128e0e2d0291)
@@ -170,8 +169,6 @@ Our mission is to provide the most powerful no-code interface for databases that
 <p>
 This project is licensed under <a href="./LICENSE">AGPLv3</a>.
 </p>
-
-
 
 # Contributors
 

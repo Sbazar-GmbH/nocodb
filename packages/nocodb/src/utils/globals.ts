@@ -1,6 +1,6 @@
 export enum MetaTable {
   PROJECT = 'nc_bases_v2',
-  BASES = 'nc_sources_v2',
+  SOURCES = 'nc_sources_v2',
   MODELS = 'nc_models_v2',
   COLUMNS = 'nc_columns_v2',
   COLUMN_VALIDATIONS = 'nc_columns_validations_v2',
@@ -12,6 +12,7 @@ export enum MetaTable {
   COL_FORMULA = 'nc_col_formula_v2',
   COL_QRCODE = 'nc_col_qrcode_v2',
   COL_BARCODE = 'nc_col_barcode_v2',
+  COL_AI = 'nc_col_ai_v2',
   FILTER_EXP = 'nc_filter_exp_v2',
   // HOOK_FILTER_EXP = 'nc_hook_filter_exp_v2',
   SORT = 'nc_sort_v2',
@@ -100,7 +101,7 @@ export const orderedMetaTables = [
   MetaTable.COLUMN_VALIDATIONS,
   MetaTable.COLUMNS,
   MetaTable.MODELS,
-  MetaTable.BASES,
+  MetaTable.SOURCES,
   MetaTable.PROJECT,
 ];
 
@@ -132,7 +133,7 @@ export const sakilaTableNames = [
 
 export enum CacheScope {
   PROJECT = 'base',
-  BASE = 'source',
+  SOURCE = 'source',
   MODEL = 'model',
   COLUMN = 'column',
   COL_PROP = 'colProp',
@@ -143,6 +144,7 @@ export enum CacheScope {
   COL_FORMULA = 'colFormula',
   COL_QRCODE = 'colQRCode',
   COL_BARCODE = 'colBarcode',
+  COL_AI = 'colAi',
   FILTER_EXP = 'filterExp',
   SORT = 'sort',
   SHARED_VIEW = 'sharedView',
@@ -187,6 +189,7 @@ export enum CacheScope {
   INTEGRATION = 'integration',
   COL_BUTTON = 'colButton',
   CMD_PALETTE = 'cmdPalette',
+  PRODUCT_FEED = 'productFeed',
 }
 
 export enum CacheGetType {
@@ -199,68 +202,6 @@ export enum CacheDelDirection {
   PARENT_TO_CHILD = 'PARENT_TO_CHILD',
   CHILD_TO_PARENT = 'CHILD_TO_PARENT',
 }
-
-export const GROUPBY_COMPARISON_OPS = <const>[
-  // these are used for groupby
-  'gb_eq',
-  'gb_null',
-];
-export const COMPARISON_OPS = <const>[
-  'eq',
-  'neq',
-  'not',
-  'like',
-  'nlike',
-  'empty',
-  'notempty',
-  'null',
-  'notnull',
-  'checked',
-  'notchecked',
-  'blank',
-  'notblank',
-  'allof',
-  'anyof',
-  'nallof',
-  'nanyof',
-  'gt',
-  'lt',
-  'gte',
-  'lte',
-  'ge',
-  'le',
-  'in',
-  'isnot',
-  'is',
-  'isWithin',
-  'btw',
-  'nbtw',
-];
-
-export const IS_WITHIN_COMPARISON_SUB_OPS = <const>[
-  'pastWeek',
-  'pastMonth',
-  'pastYear',
-  'nextWeek',
-  'nextMonth',
-  'nextYear',
-  'pastNumberOfDays',
-  'nextNumberOfDays',
-];
-
-export const COMPARISON_SUB_OPS = <const>[
-  'today',
-  'tomorrow',
-  'yesterday',
-  'oneWeekAgo',
-  'oneWeekFromNow',
-  'oneMonthAgo',
-  'oneMonthFromNow',
-  'daysAgo',
-  'daysFromNow',
-  'exactDate',
-  ...IS_WITHIN_COMPARISON_SUB_OPS,
-];
 
 export const DB_TYPES = <const>[
   'mysql2',
@@ -297,5 +238,8 @@ export const RootScopeTables = {
   ],
   [RootScopes.BASE]: [MetaTable.PROJECT],
   // It's a special case and Workspace is equivalent to org in oss
-  [RootScopes.WORKSPACE]: [MetaTable.INTEGRATIONS],
+  [RootScopes.WORKSPACE]: [
+    MetaTable.INTEGRATIONS,
+    MetaTable.INTEGRATIONS_STORE,
+  ],
 };

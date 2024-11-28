@@ -52,6 +52,11 @@ export class BasesService {
     return bases;
   }
 
+  async getProject(context: NcContext, param: { baseId: string }) {
+    const base = await Base.get(context, param.baseId);
+    return base;
+  }
+
   async getProjectWithInfo(
     context: NcContext,
     param: { baseId: string; includeConfig?: boolean },
@@ -162,57 +167,62 @@ export class BasesService {
       const ranId = nanoid();
       baseBody.prefix = `nc_${ranId}__`;
       baseBody.is_meta = true;
-      if (process.env.NC_MINIMAL_DBS === 'true') {
-        const dataConfig = await Noco.getConfig()?.meta?.db;
-        if (dataConfig?.client === 'pg') {
-          baseBody.prefix = '';
-          baseBody.sources = [
-            {
-              type: 'pg',
-              is_local: true,
-              is_meta: false,
-              config: {
-                schema: baseId,
-              },
-              inflection_column: 'camelize',
-              inflection_table: 'camelize',
+      const dataConfig = await Noco.getConfig()?.meta?.db;
+
+      if (
+        dataConfig?.client === 'pg' &&
+        process.env.NC_DISABLE_PG_DATA_REFLECTION !== 'true'
+      ) {
+        baseBody.prefix = '';
+        baseBody.sources = [
+          {
+            type: 'pg',
+            is_local: true,
+            is_meta: false,
+            config: {
+              schema: baseId,
             },
-          ];
-        } else {
-          // if env variable NC_MINIMAL_DBS is set, then create a SQLite file/connection for each base
-          // each file will be named as nc_<random_id>.db
-          const fs = require('fs');
-          const toolDir = getToolDir();
-          const nanoidv2 = customAlphabet(
-            '1234567890abcdefghijklmnopqrstuvwxyz',
-            14,
-          );
-          if (!(await promisify(fs.exists)(`${toolDir}/nc_minimal_dbs`))) {
-            await promisify(fs.mkdir)(`${toolDir}/nc_minimal_dbs`);
-          }
-          const dbId = nanoidv2();
-          const baseTitle = DOMPurify.sanitize(baseBody.title);
-          baseBody.prefix = '';
-          baseBody.sources = [
-            {
-              type: 'sqlite3',
-              is_meta: false,
-              is_local: true,
-              config: {
+            inflection_column: 'camelize',
+            inflection_table: 'camelize',
+          },
+        ];
+      } else if (
+        dataConfig?.client === 'sqlite3' &&
+        process.env.NC_MINIMAL_DBS === 'true'
+      ) {
+        // if env variable NC_MINIMAL_DBS is set, then create a SQLite file/connection for each base
+        // each file will be named as nc_<random_id>.db
+        const fs = require('fs');
+        const toolDir = getToolDir();
+        const nanoidv2 = customAlphabet(
+          '1234567890abcdefghijklmnopqrstuvwxyz',
+          14,
+        );
+        if (!(await promisify(fs.exists)(`${toolDir}/nc_minimal_dbs`))) {
+          await promisify(fs.mkdir)(`${toolDir}/nc_minimal_dbs`);
+        }
+        const dbId = nanoidv2();
+        const baseTitle = DOMPurify.sanitize(baseBody.title);
+        baseBody.prefix = '';
+        baseBody.sources = [
+          {
+            type: 'sqlite3',
+            is_meta: false,
+            is_local: true,
+            config: {
+              client: 'sqlite3',
+              connection: {
                 client: 'sqlite3',
+                database: baseTitle,
                 connection: {
-                  client: 'sqlite3',
-                  database: baseTitle,
-                  connection: {
-                    filename: `${toolDir}/nc_minimal_dbs/${baseTitle}_${dbId}.db`,
-                  },
+                  filename: `${toolDir}/nc_minimal_dbs/${baseTitle}_${dbId}.db`,
                 },
               },
-              inflection_column: 'camelize',
-              inflection_table: 'camelize',
             },
-          ];
-        }
+            inflection_column: 'camelize',
+            inflection_table: 'camelize',
+          },
+        ];
       } else {
         const db = Noco.getConfig().meta?.db;
         baseBody.sources = [
@@ -277,7 +287,11 @@ export class BasesService {
     // populate metadata if existing table
     for (const source of await base.getSources()) {
       if (process.env.NC_CLOUD !== 'true' && !base.is_meta) {
-        const info = await populateMeta(context, source, base);
+        const info = await populateMeta(context, {
+          source,
+          base,
+          user: param.user,
+        });
 
         this.appHooksService.emit(AppEvents.APIS_CREATED, {
           info,

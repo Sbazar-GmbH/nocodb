@@ -119,7 +119,9 @@ const [useProvideSharedFormStore, useSharedFormStore] = useInjectionState((share
   )
 
   function supportedFields(col: ColumnType) {
-    return !isSystemColumn(col) && col.uidt !== UITypes.SpecificDBType && (!isVirtualCol(col) || isLinksOrLTAR(col.uidt))
+    return (
+      !isSystemColumn(col) && col.uidt !== UITypes.SpecificDBType && !isAI(col) && (!isVirtualCol(col) || isLinksOrLTAR(col.uidt))
+    )
   }
 
   const loadSharedView = async () => {
@@ -395,9 +397,24 @@ const [useProvideSharedFormStore, useSharedFormStore] = useInjectionState((share
       const pk = extractPkFromRow(newRecord, meta.value?.columns as ColumnType[])
 
       if (pk && isValidRedirectUrl.value) {
-        const url = sharedFormView.value!.redirect_url!.replace('{record_id}', pk)
-        window.location.href = url
-        window.location.reload()
+        const redirectUrl = sharedFormView.value!.redirect_url!.replace('{record_id}', pk)
+
+        // Create an anchor element to parse the URL
+        const anchor = document.createElement('a')
+        anchor.href = redirectUrl
+
+        // Check if the redirect URL has the same host as the current page
+        const isSameHost = anchor.host === window.location.host
+
+        if (isSameHost) {
+          // Use pushState for internal links
+          window.history.pushState({}, 'Redirect', redirectUrl)
+          // Reload the page
+          window.location.reload()
+        } else {
+          // For external links, use window.location.href
+          window.location.href = redirectUrl
+        }
       } else {
         submitted.value = true
         progress.value = false
@@ -428,7 +445,7 @@ const [useProvideSharedFormStore, useSharedFormStore] = useInjectionState((share
     if (Object.keys(route.query || {}).length) {
       columns.value = await Promise.all(
         (columns.value || []).map(async (c) => {
-          const queryParam = route.query[c.title as string] || route.query[encodeURIComponent(c.title as string)]
+          const queryParam = route.query[c.title as string]
 
           if (
             !c.title ||

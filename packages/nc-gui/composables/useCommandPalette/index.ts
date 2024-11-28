@@ -36,6 +36,33 @@ export const useCommandPalette = createSharedComposable(() => {
 
   const { workspacesList } = storeToRefs(useWorkspace())
 
+  const workspacesCmd = computed(() =>
+    (workspacesList?.value || []).map(
+      (workspace: {
+        id: string
+        title: string
+        meta?: { color: string; icon: string | Record<string, any>; iconType: string }
+      }) => ({
+        id: `ws-nav-${workspace.id}`,
+        title: workspace.title,
+        icon: workspace.meta?.icon || 'workspace',
+        iconType: workspace.meta?.iconType,
+        iconColor: workspace.meta?.color,
+        section: 'Workspaces',
+        scopePayload: {
+          scope: `ws-${workspace.id}`,
+          data: {
+            workspace_id: workspace.id,
+          },
+        },
+        handler: processHandler({
+          type: 'navigate',
+          payload: `/${workspace.id}/settings`,
+        }),
+      }),
+    ),
+  )
+
   const commands = ref({
     homeCommands,
     baseCommands: [],
@@ -63,25 +90,7 @@ export const useCommandPalette = createSharedComposable(() => {
 
     staticCmd.push(...commands.value.baseCommands)
 
-    return (workspacesList.value || [])
-      .map((workspace: { id: string; title: string; meta?: { color: string } }) => ({
-        id: `ws-nav-${workspace.id}`,
-        title: workspace.title,
-        icon: 'workspace',
-        iconColor: workspace.meta?.color,
-        section: 'Workspaces',
-        scopePayload: {
-          scope: `ws-${workspace.id}`,
-          data: {
-            workspace_id: workspace.id,
-          },
-        },
-        handler: processHandler({
-          type: 'navigate',
-          payload: `/${workspace.id}/settings`,
-        }),
-      }))
-      .concat(staticCmd)
+    return workspacesCmd.value.concat(staticCmd)
   })
 
   const dynamicData = ref<any>([])
@@ -188,6 +197,8 @@ export const useCommandPalette = createSharedComposable(() => {
             scope: `ws-${route.value.params.typeOrId}`,
             data: { workspace_id: route.value.params.typeOrId },
           }
+
+          refreshCommandPalette.trigger()
         } else if (route.value.params.typeOrId === 'nc') {
           if (activeScope.value.data.base_id === route.value.params.baseId) return
 

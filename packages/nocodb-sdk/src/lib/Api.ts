@@ -331,6 +331,10 @@ export interface IntegrationType {
   base_id?: string;
   /** Model for Bool */
   is_private?: BoolType;
+  /** Model for Bool */
+  is_default?: BoolType;
+  /** Model for Bool */
+  is_global?: BoolType;
   /** Integration Type */
   type?: IntegrationsType;
   /**
@@ -402,6 +406,18 @@ export interface BaseReqType {
  */
 export enum IntegrationsType {
   Database = 'database',
+  Ai = 'ai',
+  Communication = 'communication',
+  SpreadSheet = 'spread-sheet',
+  ProjectManagement = 'project-management',
+  Crm = 'crm',
+  Marketing = 'marketing',
+  Ats = 'ats',
+  Development = 'development',
+  Finance = 'finance',
+  Ticketing = 'ticketing',
+  Storage = 'storage',
+  Others = 'others',
 }
 
 /**
@@ -568,7 +584,8 @@ export interface ColumnType {
     | 'Links'
     | 'User'
     | 'CreatedBy'
-    | 'LastModifiedBy';
+    | 'LastModifiedBy'
+    | 'AI';
   /** Is Unsigned? */
   un?: BoolType;
   /** Is unique? */
@@ -765,6 +782,8 @@ export interface FilterType {
         | 'tomorrow'
         | ('yesterday' & null)
       );
+  /** Foreign Key to parent column */
+  fk_parent_column_id?: StringOrNullType;
   /** Foreign Key to Column */
   fk_column_id?: StringOrNullType;
   /** Foreign Key to Hook */
@@ -789,6 +808,11 @@ export interface FilterType {
   base_id?: string;
   /** The filter value. Can be NULL for some operators. */
   value?: any;
+  /**
+   * The order of the filter
+   * @example 1
+   */
+  order?: number;
 }
 
 /**
@@ -1112,7 +1136,7 @@ export interface ButtonType {
   /** Unique ID */
   id?: IdType;
   /** Whether button is webhook or url */
-  type?: 'webhook' | 'url';
+  type?: ButtonActionsType;
   /** Label of Button */
   label?: string;
   /** Button Theme */
@@ -1149,6 +1173,12 @@ export interface ButtonType {
   fk_webhook_id?: IdType;
   /** Foreign Key to Column */
   fk_column_id?: IdType;
+  /** Comma separated column ids to be updated with the generated value */
+  output_column_ids?: string;
+  /** Foreign key to AI integration */
+  fk_integration_id?: string;
+  /** AI model */
+  model?: string;
 }
 
 /**
@@ -1160,7 +1190,7 @@ export interface ButtonColumnReqType {
   /** UI Data Type */
   uidt?: 'Formula';
   /** Whether button is webhook or url */
-  type?: 'webhook' | 'url';
+  type?: ButtonActionsType;
   /** Button Theme */
   theme?: 'solid' | 'text' | 'light';
   /** Button color */
@@ -2023,7 +2053,7 @@ export interface NormalColumnRequestType {
   /** Column Default Value */
   cdf?: StringOrNullOrBooleanOrNumberType;
   /** Column Name */
-  column_name: string;
+  column_name?: string;
   /** Model for StringOrNull */
   csn?: StringOrNullType;
   /** Data Type */
@@ -2045,7 +2075,7 @@ export interface NormalColumnRequestType {
   /** Is this column required? */
   rqd?: BoolType;
   /** Column Title */
-  title?: string;
+  title: string;
   /** UI Data Type */
   uidt?:
     | 'Attachment'
@@ -2088,7 +2118,8 @@ export interface NormalColumnRequestType {
     | 'Links'
     | 'User'
     | 'CreatedBy'
-    | 'LastModifiedBy';
+    | 'LastModifiedBy'
+    | 'AI';
   /** Is this column unique? */
   un?: BoolType;
   /** Is this column unique? */
@@ -2664,7 +2695,7 @@ export interface TableType {
   /** The columns included in this table */
   columns?: ColumnType[];
   /** Column Models grouped by IDs */
-  columnsById?: object;
+  columnsById?: Record<string, any>;
   /** Model for Bool */
   deleted?: BoolType;
   /** Is this table enabled? */
@@ -2684,7 +2715,7 @@ export interface TableType {
   /** Table Description */
   description?: TextOrNullType;
   /** Table Name. Prefix will be added for XCDB bases. */
-  table_name: string;
+  table_name?: string;
   /** Currently not in use */
   tags?: StringOrNullType;
   /** Table Title */
@@ -2722,12 +2753,12 @@ export interface TableReqType {
    * Table name
    * @example my_table
    */
-  table_name: string;
+  table_name?: string;
   /**
    * Table title
    * @example My Table
    */
-  title?: string;
+  title: string;
 }
 
 /**
@@ -2839,6 +2870,8 @@ export interface ViewType {
     | MapType
     | CalendarType
     | (FormType & GalleryType & GridType & KanbanType & MapType & CalendarType);
+  /** ID of view owner user */
+  owned_by?: IdType;
 }
 
 /**
@@ -2911,6 +2944,8 @@ export interface ViewUpdateReqType {
   order?: number;
   /** Should this view show system fields? */
   show_system_fields?: BoolType;
+  /** ID of view owner user */
+  owned_by?: IdType;
 }
 
 /**
@@ -3093,6 +3128,14 @@ export interface CalendarColumnReqType {
   order?: number;
 }
 
+export interface ErrorReportReqType {
+  errors?: {
+    message?: string;
+    stack?: string;
+  }[];
+  extra?: object;
+}
+
 /**
  * Model for Comment
  */
@@ -3263,6 +3306,23 @@ export interface ExtensionReqType {
   meta?: MetaType;
   /** Order of the extension */
   order?: number;
+}
+
+export interface AIRecordType {
+  /** Value */
+  value?: string;
+  /** Last Modified By User ID */
+  lastModifiedBy?: IdType;
+  /** Last Modified Time */
+  lastModifiedTime?: string;
+  /** Is any referenced value updated? */
+  isStale?: boolean;
+}
+
+export enum ButtonActionsType {
+  Webhook = 'webhook',
+  Url = 'url',
+  Ai = 'ai',
 }
 
 import type {
@@ -4198,7 +4258,7 @@ export class Api<
  * @tags Org Tokens
  * @name Delete
  * @summary Delete Organisation API Tokens
- * @request DELETE:/api/v1/tokens/{token}
+ * @request DELETE:/api/v1/tokens/{tokenId}
  * @response `200` `number` OK
  * @response `400` `{
   \** @example BadRequest [Error]: <ERROR MESSAGE> *\
@@ -4206,7 +4266,7 @@ export class Api<
 
 }`
  */
-    delete: (token: string, params: RequestParams = {}) =>
+    delete: (tokenId: string, params: RequestParams = {}) =>
       this.request<
         number,
         {
@@ -4214,7 +4274,7 @@ export class Api<
           msg: string;
         }
       >({
-        path: `/api/v1/tokens/${token}`,
+        path: `/api/v1/tokens/${tokenId}`,
         method: 'DELETE',
         format: 'json',
         ...params,
@@ -5466,6 +5526,54 @@ export class Api<
       }),
 
     /**
+ * @description Duplicate a shared base
+ * 
+ * @tags Base
+ * @name DuplicateShared
+ * @summary Duplicate Shared Base
+ * @request POST:/api/v2/meta/duplicate/{workspaceId}/shared/{sharedBaseId}
+ * @response `200` `{
+  name?: string,
+  id?: string,
+
+}` OK
+ * @response `400` `{
+  \** @example BadRequest [Error]: <ERROR MESSAGE> *\
+  msg: string,
+
+}`
+ */
+    duplicateShared: (
+      workspaceId: IdType,
+      sharedBaseId: any,
+      data: {
+        options?: {
+          excludeData?: boolean;
+          excludeViews?: boolean;
+        };
+        base?: object;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<
+        {
+          name?: string;
+          id?: string;
+        },
+        {
+          /** @example BadRequest [Error]: <ERROR MESSAGE> */
+          msg: string;
+        }
+      >({
+        path: `/api/v2/meta/duplicate/${workspaceId}/shared/${sharedBaseId}`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
+        ...params,
+      }),
+
+    /**
  * @description Synchronise the meta data difference between NC_DB and external data sources 
  * 
  * @tags Base
@@ -6240,6 +6348,8 @@ export class Api<
           excludeData?: boolean;
           excludeViews?: boolean;
           excludeHooks?: boolean;
+          /** New table title */
+          title?: string;
         };
       },
       params: RequestParams = {}
@@ -7757,7 +7867,13 @@ export class Api<
 
 }`
  */
-    read: (viewId: string, params: RequestParams = {}) =>
+    read: (
+      viewId: string,
+      query?: {
+        includeAllFilters?: boolean;
+      },
+      params: RequestParams = {}
+    ) =>
       this.request<
         FilterListType,
         {
@@ -7767,6 +7883,7 @@ export class Api<
       >({
         path: `/api/v1/db/meta/views/${viewId}/filters`,
         method: 'GET',
+        query: query,
         format: 'json',
         ...params,
       }),
@@ -8387,6 +8504,42 @@ export class Api<
       >({
         path: `/api/v1/db/data/${orgs}/${baseName}/${tableName}/${rowId}/exist`,
         method: 'GET',
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+ * @description Bulk upsert table rows in one go.
+ * 
+ * @tags DB Table Row
+ * @name BulkUpsert
+ * @summary Bulk Upsert Table Rows
+ * @request POST:/api/v1/db/data/bulk/{orgs}/{baseName}/{tableName}/upsert
+ * @response `200` `(any)[]` OK
+ * @response `400` `{
+  \** @example BadRequest [Error]: <ERROR MESSAGE> *\
+  msg: string,
+
+}`
+ */
+    bulkUpsert: (
+      orgs: string,
+      baseName: string,
+      tableName: string,
+      data: object[],
+      params: RequestParams = {}
+    ) =>
+      this.request<
+        any[],
+        {
+          /** @example BadRequest [Error]: <ERROR MESSAGE> */
+          msg: string;
+        }
+      >({
+        path: `/api/v1/db/data/bulk/${orgs}/${baseName}/${tableName}/upsert`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
         format: 'json',
         ...params,
       }),
@@ -9436,6 +9589,40 @@ export class Api<
         }
       >({
         path: `/api/v1/db/public/calendar-view/${sharedViewUuid}/countByDate`,
+        method: 'GET',
+        query: query,
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+ * @description Count how many rows in the given Table View
+ * 
+ * @tags Public
+ * @name DbViewRowCount
+ * @summary Count Table View Rows
+ * @request GET:/api/v2/public/shared-view/{sharedViewUuid}/count
+ * @response `200` `{
+  count?: number,
+
+}` OK
+ */
+    dbViewRowCount: (
+      sharedViewUuid: string,
+      query?: {
+        where?: string;
+        /** Query params for nested data */
+        nested?: any;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<
+        {
+          count?: number;
+        },
+        any
+      >({
+        path: `/api/v2/public/shared-view/${sharedViewUuid}/count`,
         method: 'GET',
         query: query,
         format: 'json',
@@ -10721,6 +10908,23 @@ export class Api<
       }),
 
     /**
+     * @description Error Reporting
+     *
+     * @tags Utils, Internal
+     * @name ErrorReport
+     * @summary Error Reporting
+     * @request POST:/api/v1/error-reporting
+     */
+    errorReport: (data: any, params: RequestParams = {}) =>
+      this.request<any, any>({
+        path: `/api/v1/error-reporting`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        ...params,
+      }),
+
+    /**
  * @description Generic Axios Call
  * 
  * @tags Utils
@@ -10840,6 +11044,57 @@ export class Api<
       >({
         path: `/api/v1/health`,
         method: 'GET',
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+ * No description
+ * 
+ * @tags Utils
+ * @name Feed
+ * @summary Get Feed
+ * @request GET:/api/v2/feed
+ * @response `200` `({
+  Id?: string,
+  Description?: string,
+  Tags?: string,
+  Images?: (object)[],
+  Url?: string,
+  "Published Time"?: string,
+
+})[]` OK
+ * @response `400` `{
+  \** @example BadRequest [Error]: <ERROR MESSAGE> *\
+  msg: string,
+
+}`
+ */
+    feed: (
+      query?: {
+        type?: 'all' | 'github' | 'youtube' | 'cloud';
+        per_page?: number;
+        page?: number;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<
+        {
+          Id?: string;
+          Description?: string;
+          Tags?: string;
+          Images?: object[];
+          Url?: string;
+          'Published Time'?: string;
+        }[],
+        {
+          /** @example BadRequest [Error]: <ERROR MESSAGE> */
+          msg: string;
+        }
+      >({
+        path: `/api/v2/feed`,
+        method: 'GET',
+        query: query,
         format: 'json',
         ...params,
       }),
@@ -11363,7 +11618,7 @@ export class Api<
  * @tags Plugin
  * @name Status
  * @summary Get Plugin Status
- * @request GET:/api/v1/db/meta/plugins/{pluginTitle}/status
+ * @request GET:/api/v1/db/meta/plugins/{pluginId}/status
  * @response `200` `boolean` OK
  * @response `400` `{
   \** @example BadRequest [Error]: <ERROR MESSAGE> *\
@@ -11371,7 +11626,7 @@ export class Api<
 
 }`
  */
-    status: (pluginTitle: string, params: RequestParams = {}) =>
+    status: (pluginId: string, params: RequestParams = {}) =>
       this.request<
         boolean,
         {
@@ -11379,7 +11634,7 @@ export class Api<
           msg: string;
         }
       >({
-        path: `/api/v1/db/meta/plugins/${pluginTitle}/status`,
+        path: `/api/v1/db/meta/plugins/${pluginId}/status`,
         method: 'GET',
         format: 'json',
         ...params,
@@ -11546,7 +11801,7 @@ export class Api<
  * @tags API Token
  * @name Delete
  * @summary Delete API Token
- * @request DELETE:/api/v1/db/meta/projects/{baseId}/api-tokens/{token}
+ * @request DELETE:/api/v1/db/meta/projects/{baseId}/api-tokens/{tokenId}
  * @response `200` `number` OK
  * @response `400` `{
   \** @example BadRequest [Error]: <ERROR MESSAGE> *\
@@ -11554,7 +11809,7 @@ export class Api<
 
 }`
  */
-    delete: (baseId: IdType, token: string, params: RequestParams = {}) =>
+    delete: (baseId: IdType, tokenId: string, params: RequestParams = {}) =>
       this.request<
         number,
         {
@@ -11562,7 +11817,7 @@ export class Api<
           msg: string;
         }
       >({
-        path: `/api/v1/db/meta/projects/${baseId}/api-tokens/${token}`,
+        path: `/api/v1/db/meta/projects/${baseId}/api-tokens/${tokenId}`,
         method: 'DELETE',
         format: 'json',
         ...params,
@@ -11584,6 +11839,11 @@ export class Api<
          * @example download/noco/jango_fett/Table1/attachment/uVbjPVQxC_SSfs8Ctx.jpg
          */
         path: string;
+        /**
+         * The scope of the attachment
+         * @example workspacePics
+         */
+        scope?: 'workspacePics' | 'profilePics' | 'organizationPics';
       },
       data: {
         files: FileReqType[];
@@ -11614,6 +11874,11 @@ export class Api<
          * @example download/noco/jango_fett/Table1/attachment/c7z_UF8sZBgJUxMjpN.jpg
          */
         path: string;
+        /**
+         * The scope of the attachment
+         * @example workspacePics
+         */
+        scope?: 'workspacePics' | 'profilePics' | 'organizationPics';
       },
       data: AttachmentReqType[],
       params: RequestParams = {}
@@ -12440,6 +12705,146 @@ export class Api<
         ...params,
       }),
   };
+  ai = {
+    /**
+     * @description AI Utils
+     *
+     * @tags Ai
+     * @name Utils
+     * @summary AI Utils
+     * @request POST:/api/v2/ai/bases/{baseId}/utils
+     * @response `200` `any` OK
+     */
+    utils: (
+      baseId: IdType,
+      data: {
+        operation?: string;
+        input: any;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<any, any>({
+        path: `/api/v2/ai/bases/${baseId}/utils`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+     * @description AI Schema
+     *
+     * @tags Ai
+     * @name Schema
+     * @summary AI Schema
+     * @request POST:/api/v2/ai/bases/{baseId}/schema
+     * @response `200` `any` OK
+     */
+    schema: (
+      baseId: IdType,
+      data: {
+        operation?: string;
+        input: any;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<any, any>({
+        path: `/api/v2/ai/bases/${baseId}/schema`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+     * @description AI Schema
+     *
+     * @tags Ai
+     * @name SchemaCreate
+     * @summary AI Schema
+     * @request POST:/api/v2/ai/workspaces/{workspaceId}/bases
+     * @response `200` `any` OK
+     */
+    schemaCreate: (
+      workspaceId: IdType,
+      data: {
+        operation?: string;
+        input: any;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<any, any>({
+        path: `/api/v2/ai/workspaces/${workspaceId}/bases`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+     * @description Generate AI data for specified rows
+     *
+     * @tags Ai
+     * @name DataGenerate
+     * @summary Generate AI Data
+     * @request POST:/api/v2/ai/tables/{modelId}/rows/generate
+     * @response `200` `(any)[]` OK
+     */
+    dataGenerate: (
+      modelId: string,
+      data: {
+        rowIds: string[];
+        column?:
+          | string
+          | {
+              title: string;
+              prompt_raw: string;
+              fk_integration_id: string;
+              uidt: string;
+              model?: string;
+              output_column_ids?: string;
+            };
+        preview?: boolean;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<any[], any>({
+        path: `/api/v2/ai/tables/${modelId}/rows/generate`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+     * @description Extract AI data from the input
+     *
+     * @tags Ai
+     * @name DataExtract
+     * @summary Extract Data using AI
+     * @request POST:/api/v2/ai/tables/{modelId}/extract
+     * @response `200` `(any)[]` OK
+     */
+    dataExtract: (
+      modelId: string,
+      data: {
+        input: string;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<any[], any>({
+        path: `/api/v2/ai/tables/${modelId}/extract`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
+        ...params,
+      }),
+  };
   integration = {
     /**
      * @description List integrations
@@ -12549,6 +12954,149 @@ export class Api<
       this.request<void, any>({
         path: `/api/v2/meta/integrations/${integrationId}`,
         method: 'DELETE',
+        ...params,
+      }),
+
+    /**
+     * @description Set integration as category default
+     *
+     * @tags Integration
+     * @name SetDefault
+     * @summary Set integration as category default
+     * @request PATCH:/api/v2/meta/integrations/{integrationId}/default
+     * @response `200` `void` OK
+     */
+    setDefault: (integrationId: string, params: RequestParams = {}) =>
+      this.request<void, any>({
+        path: `/api/v2/meta/integrations/${integrationId}/default`,
+        method: 'PATCH',
+        ...params,
+      }),
+
+    /**
+     * @description Store integration
+     *
+     * @tags Integration
+     * @name Store
+     * @summary Store integration
+     * @request POST:/api/v2/integrations/:integrationId/store
+     * @response `200` `void` OK
+     */
+    store: (
+      integrationId: string,
+      data:
+        | {
+            op: 'list';
+            limit: number;
+            offset: number;
+          }
+        | {
+            op: 'get';
+          }
+        | {
+            op: 'sum';
+            fields: string[];
+          },
+      params: RequestParams = {}
+    ) =>
+      this.request<void, any>({
+        path: `/api/v2/integrations/${integrationId}/store`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        ...params,
+      }),
+  };
+  integrations = {
+    /**
+     * @description List available integrations
+     *
+     * @tags Integrations
+     * @name List
+     * @summary Integration List
+     * @request GET:/api/v2/integrations
+     * @response `200` `object` OK
+     */
+    list: (params: RequestParams = {}) =>
+      this.request<object, any>({
+        path: `/api/v2/integrations`,
+        method: 'GET',
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+     * @description Get info for integration
+     *
+     * @tags Integrations
+     * @name Info
+     * @summary Get Integration Info
+     * @request GET:/api/v2/integrations/:type/:subType
+     * @response `200` `object` OK
+     */
+    info: (type: string, subType: string, params: RequestParams = {}) =>
+      this.request<object, any>({
+        path: `/api/v2/integrations/${type}/${subType}`,
+        method: 'GET',
+        format: 'json',
+        ...params,
+      }),
+
+    /**
+     * @description Call exposed integration endpoint
+     *
+     * @tags Integrations
+     * @name Endpoint
+     * @summary Call exposed integration endpoint
+     * @request POST:/api/v2/integrations/:integrationId/:endpoint
+     * @response `200` `object` OK
+     */
+    endpoint: (
+      integrationId: string,
+      endpoint: string,
+      data: object,
+      params: RequestParams = {}
+    ) =>
+      this.request<object, any>({
+        path: `/api/v2/integrations/${integrationId}/${endpoint}`,
+        method: 'POST',
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
+        ...params,
+      }),
+  };
+  action = {
+    /**
+     * @description Trigger a button action
+     *
+     * @tags Action
+     * @name TriggerButton
+     * @summary Trigger a button action
+     * @request POST:/api/v2/tables/:tableId/button/:fieldId
+     * @response `200` `object` OK
+     */
+    triggerButton: (
+      tableId: string,
+      fieldId: string,
+      data: {
+        customRows?: any[];
+        rowIds?: string[];
+        customField?: object;
+      },
+      query?: {
+        /** Trigger AI action with custom record data provided in request body as rows */
+        passThrough?: boolean;
+      },
+      params: RequestParams = {}
+    ) =>
+      this.request<object, any>({
+        path: `/api/v2/tables/${tableId}/button/${fieldId}`,
+        method: 'POST',
+        query: query,
+        body: data,
+        type: ContentType.Json,
+        format: 'json',
         ...params,
       }),
   };
